@@ -45,6 +45,11 @@ from t5x import train_state as train_state_lib
 from t5x import trainer as trainer_lib
 from t5x import utils
 import tensorflow as tf
+
+from codecarbon import EmissionsTracker
+from codecarbon.output_methods.logger import LoggerOutput
+import logging
+import json
 # pylint:enable=g-import-not-at-top
 
 # pylint:enable=g-import-not-at-top
@@ -198,6 +203,10 @@ def train(
   Returns:
     The tuple of (last_step, last_train_state).
   """
+  with open(f'{train_dataset_cfg.code_carbon_out}.conf', "w") as f:
+    for cfg in (train_dataset_cfg, train_eval_dataset_cfg, infer_eval_dataset_cfg, checkpoint_cfg):
+      f.write(json.dumps(cfg.__dict__, indent=4), default=lambda o: '<not serializable>')
+
   logging.info('Process ID: %d', jax.process_index())
   tf.io.gfile.makedirs(model_dir)
 
@@ -663,6 +672,12 @@ def train(
   checkpoint_steps_index = 0
 
   # Main Loop over "epochs".
+  cc_logger = logging.getLogger(__name__)
+  tracker = EmissionsTracker(save_to_api=True,
+                            save_to_logger=True, logging_logger=LoggerOutput(cc_logger),
+                            measure_power_secs=15,
+                            output_file=f'{train_dataset_cfg.code_carbon_out}.log', tracking_mode='machine', gpu_ids='0,1,2,3')
+  tracker.start()
   for epoch in range(first_epoch, num_epochs):
     final_epoch = epoch == num_epochs - 1
     logging.info('Epoch %d of %d', epoch, num_epochs)
@@ -719,6 +734,7 @@ def train(
         train_summary = trainer.train(
             train_iter, inner_num_steps, start_step=host_step
         )
+        tracker.stop()
         if not concurrent_metrics:
           # Note that we always pass the dictionary of `tasks` -> summary so
           # that the actions can be performed without special casing. The
