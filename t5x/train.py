@@ -132,6 +132,7 @@ def train(
         Callable[[utils.DatasetConfig, models.BaseTransformerModel], None]
     ] = utils.verify_matching_vocabs,
     gc_period: int = 0,
+    code_carbon_out: str = 'cc_output_nvidia'
 ) -> Tuple[int, train_state_lib.TrainState]:
   """Train function.
 
@@ -203,9 +204,9 @@ def train(
   Returns:
     The tuple of (last_step, last_train_state).
   """
-  with open(f'{train_dataset_cfg.code_carbon_out}.conf', "w") as f:
+  with open(f'{code_carbon_out}.conf', "w") as f:
     for cfg in (train_dataset_cfg, train_eval_dataset_cfg, infer_eval_dataset_cfg, checkpoint_cfg):
-      f.write(json.dumps(cfg.__dict__, indent=4), default=lambda o: '<not serializable>')
+      f.write(json.dumps(cfg.__dict__, indent=4, default=lambda o: '<not serializable>'))
 
   logging.info('Process ID: %d', jax.process_index())
   tf.io.gfile.makedirs(model_dir)
@@ -676,7 +677,7 @@ def train(
   tracker = EmissionsTracker(save_to_api=True,
                             save_to_logger=True, logging_logger=LoggerOutput(cc_logger),
                             measure_power_secs=15,
-                            output_file=f'{train_dataset_cfg.code_carbon_out}.log', tracking_mode='machine', gpu_ids='0,1,2,3')
+                            output_file=f'{code_carbon_out}.log', tracking_mode='machine', gpu_ids='0,1,2,3')
   tracker.start()
   for epoch in range(first_epoch, num_epochs):
     final_epoch = epoch == num_epochs - 1
